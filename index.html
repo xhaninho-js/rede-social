@@ -4,93 +4,18 @@
   <meta charset="UTF-8">
   <title>Zona Gematria</title>
   <style>
-    * {
-      box-sizing: border-box;
-      font-family: Arial, Helvetica, sans-serif;
-    }
-
-    body {
-      background: #f0f2f5;
-      margin: 0;
-      padding: 0;
-    }
-
-    header {
-      background: #1877f2;
-      color: white;
-      padding: 15px;
-      text-align: center;
-      font-size: 22px;
-      font-weight: bold;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: 20px auto;
-    }
-
-    .post-box {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
-
-    textarea {
-      width: 100%;
-      height: 80px;
-      resize: none;
-      padding: 10px;
-      font-size: 14px;
-    }
-
-    button {
-      background: #1877f2;
-      color: white;
-      border: none;
-      padding: 8px 15px;
-      margin-top: 10px;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: #145dbf;
-    }
-
-    .post {
-      background: white;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 15px;
-    }
-
-    .post p {
-      margin: 0 0 10px;
-    }
-
-    .actions {
-      display: flex;
-      gap: 10px;
-    }
-
-    .comment-box {
-      margin-top: 10px;
-    }
-
-    .comment-box input {
-      width: 100%;
-      padding: 5px;
-      margin-top: 5px;
-    }
-
-    .comment {
-      background: #f0f2f5;
-      padding: 5px;
-      border-radius: 5px;
-      margin-top: 5px;
-      font-size: 13px;
-    }
+    * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+    body { background:#f0f2f5; margin:0; }
+    header { background:#1877f2; color:#fff; padding:15px; text-align:center; font-size:22px; font-weight:bold; }
+    .container { max-width:600px; margin:20px auto; }
+    .box, .post { background:#fff; padding:15px; border-radius:8px; margin-bottom:15px; }
+    input, textarea { width:100%; padding:8px; margin-top:8px; }
+    textarea { resize:none; height:70px; }
+    button { background:#1877f2; color:#fff; border:none; padding:8px 12px; border-radius:5px; cursor:pointer; }
+    button:hover { background:#145dbf; }
+    .actions { margin-top:10px; display:flex; gap:10px; }
+    .comment { background:#f0f2f5; padding:5px; border-radius:5px; margin-top:5px; font-size:13px; }
+    .user { font-weight:bold; margin-bottom:5px; }
   </style>
 </head>
 <body>
@@ -99,7 +24,8 @@
 
 <div class="container">
 
-  <div class="post-box">
+  <div class="box">
+    <input id="username" placeholder="Seu nome">
     <textarea id="postText" placeholder="No que você está pensando?"></textarea>
     <button onclick="addPost()">Publicar</button>
   </div>
@@ -108,70 +34,78 @@
 
 </div>
 
-<script>
-  let posts = JSON.parse(localStorage.getItem("posts")) || [];
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import {
+    getFirestore, collection, addDoc, doc, updateDoc,
+    onSnapshot, serverTimestamp, query, orderBy
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  function savePosts() {
-    localStorage.setItem("posts", JSON.stringify(posts));
-  }
+  // 🔴 COLE AQUI SUAS CHAVES DO FIREBASE
+  const firebaseConfig = {
+    apiKey: "SUA_API_KEY",
+    authDomain: "SEU_DOMINIO",
+    projectId: "SEU_PROJECT_ID",
+    storageBucket: "SEU_BUCKET",
+    messagingSenderId: "SEU_ID",
+    appId: "SEU_APP_ID"
+  };
 
-  function addPost() {
-    const text = document.getElementById("postText").value.trim();
-    if (text === "") return;
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
 
-    posts.unshift({
+  const feed = document.getElementById("feed");
+
+  window.addPost = async () => {
+    const text = postText.value.trim();
+    const user = username.value.trim() || "Anônimo";
+    if (!text) return;
+
+    await addDoc(collection(db, "posts"), {
+      user,
       text,
       likes: 0,
-      comments: []
+      comments: [],
+      createdAt: serverTimestamp()
     });
 
-    document.getElementById("postText").value = "";
-    savePosts();
-    renderFeed();
-  }
+    postText.value = "";
+  };
 
-  function likePost(index) {
-    posts[index].likes++;
-    savePosts();
-    renderFeed();
-  }
+  window.likePost = async (id, likes) => {
+    await updateDoc(doc(db, "posts", id), { likes: likes + 1 });
+  };
 
-  function addComment(index, input) {
-    const comment = input.value.trim();
-    if (comment === "") return;
-
-    posts[index].comments.push(comment);
+  window.addComment = async (id, comments, input) => {
+    if (!input.value.trim()) return;
+    comments.push(input.value);
     input.value = "";
-    savePosts();
-    renderFeed();
-  }
+    await updateDoc(doc(db, "posts", id), { comments });
+  };
 
-  function renderFeed() {
-    const feed = document.getElementById("feed");
+  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
+
+  onSnapshot(q, (snapshot) => {
     feed.innerHTML = "";
+    snapshot.forEach(d => {
+      const p = d.data();
+      const div = document.createElement("div");
+      div.className = "post";
 
-    posts.forEach((post, index) => {
-      const postDiv = document.createElement("div");
-      postDiv.className = "post";
-
-      postDiv.innerHTML = `
-        <p>${post.text}</p>
+      div.innerHTML = `
+        <div class="user">${p.user}</div>
+        <p>${p.text}</p>
         <div class="actions">
-          <button onclick="likePost(${index})">Curtir (${post.likes})</button>
+          <button onclick="likePost('${d.id}', ${p.likes})">Curtir (${p.likes})</button>
         </div>
-
-        <div class="comment-box">
-          <input type="text" placeholder="Comentar..."
-            onkeydown="if(event.key==='Enter') addComment(${index}, this)">
-          ${post.comments.map(c => `<div class="comment">${c}</div>`).join("")}
-        </div>
+        <input placeholder="Comentar..." 
+          onkeydown="if(event.key==='Enter') addComment('${d.id}', ${JSON.stringify(p.comments)}, this)">
+        ${p.comments.map(c => `<div class="comment">${c}</div>`).join("")}
       `;
 
-      feed.appendChild(postDiv);
+      feed.appendChild(div);
     });
-  }
-
-  renderFeed();
+  });
 </script>
 
 </body>
